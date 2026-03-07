@@ -552,6 +552,64 @@ class TestClaudeCodeParserContentExtraction:
         assert "..." in messages[0].content
 
 
+class TestClaudeCodeParserSubagentRelationships:
+    """Tests for subagent relationship detection."""
+
+    def test_detects_subagent_from_path(
+        self, parser: ClaudeCodeParser, tmp_path: Path
+    ) -> None:
+        """Should detect subagent relationship from path structure."""
+        parent_uuid = "1b373cff-7ca9-41f5-bed0-eb6d831ee5f0"
+        subagent_dir = tmp_path / parent_uuid / "subagents"
+        subagent_dir.mkdir(parents=True)
+        file_path = subagent_dir / "agent-a77d39e91537bc64f.jsonl"
+
+        with open(file_path, "w") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "type": "user",
+                        "cwd": "/project",
+                        "sessionId": parent_uuid,
+                        "timestamp": "2026-01-26T00:00:00Z",
+                        "message": {"role": "user", "content": "Do research"},
+                    }
+                )
+                + "\n"
+            )
+
+        rel = parser.extract_relationships(file_path)
+
+        assert rel.parent_session_id == parent_uuid
+        assert rel.relationship_type == "subagent"
+        assert rel.compaction_count == 0
+
+    def test_non_subagent_not_detected(
+        self, parser: ClaudeCodeParser, tmp_path: Path
+    ) -> None:
+        """Should not detect subagent for regular session files."""
+        file_path = tmp_path / "1b373cff-7ca9-41f5-bed0-eb6d831ee5f0.jsonl"
+
+        with open(file_path, "w") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "type": "user",
+                        "cwd": "/project",
+                        "sessionId": "1b373cff-7ca9-41f5-bed0-eb6d831ee5f0",
+                        "timestamp": "2026-01-26T00:00:00Z",
+                        "message": {"role": "user", "content": "Hello"},
+                    }
+                )
+                + "\n"
+            )
+
+        rel = parser.extract_relationships(file_path)
+
+        assert rel.parent_session_id is None
+        assert rel.relationship_type is None
+
+
 class TestClaudeCodeParserWithRealFiles:
     """Tests using real Claude Code files (if available)."""
 

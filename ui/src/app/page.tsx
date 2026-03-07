@@ -189,16 +189,45 @@ function Filters({
   );
 }
 
-function ConversationCard({ conversation, showProject = true }: { conversation: Conversation; showProject?: boolean }) {
+function RelationshipIndicator({ type }: { type?: string }) {
+  if (!type) return null;
+  if (type === "fork") {
+    return (
+      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300" title="Forked from another session">
+        Fork
+      </span>
+    );
+  }
+  if (type === "continuation") {
+    return (
+      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" title="Continuation of another session">
+        Continuation
+      </span>
+    );
+  }
+  if (type === "subagent") {
+    return (
+      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300" title="Subagent task from parent session">
+        Subagent
+      </span>
+    );
+  }
+  return null;
+}
+
+function ConversationCard({ conversation, showProject = true, indented = false }: { conversation: Conversation; showProject?: boolean; indented?: boolean }) {
   return (
     <a
       href={`/conversation/${encodeURIComponent(conversation.id)}`}
-      className="block p-4 border-b border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors group"
+      className={`block p-4 border-b border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors group ${indented ? "pl-10" : ""}`}
     >
       <div className="flex justify-between items-start gap-4 mb-2">
-        <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-1">
-          {conversation.title || "Untitled Conversation"}
-        </h3>
+        <div className="flex items-center gap-2 min-w-0">
+          <RelationshipIndicator type={conversation.relationship_type} />
+          <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-1">
+            {conversation.title || "Untitled Conversation"}
+          </h3>
+        </div>
         <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
           {formatTimestamp(conversation.last_ts)}
         </span>
@@ -223,6 +252,12 @@ function ConversationCard({ conversation, showProject = true }: { conversation: 
         )}
         <span className="text-zinc-400 dark:text-zinc-500">•</span>
         <span className="text-zinc-500 dark:text-zinc-400 font-medium">{conversation.message_count} messages</span>
+        {conversation.compaction_count ? (
+          <>
+            <span className="text-zinc-400 dark:text-zinc-500">•</span>
+            <span className="text-zinc-400 dark:text-zinc-500">{conversation.compaction_count} compactions</span>
+          </>
+        ) : null}
       </div>
     </a>
   );
