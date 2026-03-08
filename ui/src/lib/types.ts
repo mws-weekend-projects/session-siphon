@@ -35,6 +35,10 @@ export interface Conversation {
   message_count: number;
   title: string;
   preview: string;
+  git_repo?: string;
+  parent_conversation_id?: string;
+  relationship_type?: string; // "fork", "continuation", "subagent"
+  compaction_count?: number;
 }
 
 /**

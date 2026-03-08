@@ -215,6 +215,79 @@ function RelationshipIndicator({ type }: { type?: string }) {
   return null;
 }
 
+type ConversationHit = { document: Conversation };
+
+/**
+ * Nest subagent conversations under their parent.
+ * Returns hits with subagents removed from top level, attached to parents.
+ */
+function nestSubagents(hits: ConversationHit[]): {
+  topLevel: ConversationHit[];
+  childrenByParent: Record<string, ConversationHit[]>;
+} {
+  const subagents: ConversationHit[] = [];
+  const topLevel: ConversationHit[] = [];
+  const childrenByParent: Record<string, ConversationHit[]> = {};
+
+  for (const hit of hits) {
+    if (hit.document.relationship_type === "subagent" && hit.document.parent_conversation_id) {
+      subagents.push(hit);
+    } else {
+      topLevel.push(hit);
+    }
+  }
+
+  for (const sub of subagents) {
+    const parentId = sub.document.parent_conversation_id!;
+    if (!childrenByParent[parentId]) childrenByParent[parentId] = [];
+    childrenByParent[parentId].push(sub);
+  }
+
+  // Sort children by timestamp
+  for (const children of Object.values(childrenByParent)) {
+    children.sort((a, b) => a.document.first_ts - b.document.first_ts);
+  }
+
+  return { topLevel, childrenByParent };
+}
+
+function ConversationWithChildren({
+  hit,
+  childrenByParent,
+  showProject = true,
+}: {
+  hit: ConversationHit;
+  childrenByParent: Record<string, ConversationHit[]>;
+  showProject?: boolean;
+}) {
+  const children = childrenByParent[hit.document.conversation_id];
+  const [showChildren, setShowChildren] = useState(false);
+
+  return (
+    <div>
+      <ConversationCard conversation={hit.document} showProject={showProject} />
+      {children && children.length > 0 && (
+        <div className="pl-6 border-l-2 border-green-100 dark:border-green-900/30 ml-4">
+          <button
+            onClick={() => setShowChildren(!showChildren)}
+            className="w-full text-left px-4 py-1.5 text-xs text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/10 transition-colors"
+          >
+            {showChildren ? "Hide" : "Show"} {children.length} subagent{children.length !== 1 ? "s" : ""}
+          </button>
+          {showChildren && children.map((child) => (
+            <ConversationCard
+              key={child.document.id}
+              conversation={child.document}
+              showProject={showProject}
+              indented
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ConversationCard({ conversation, showProject = true, indented = false }: { conversation: Conversation; showProject?: boolean; indented?: boolean }) {
   return (
     <a
@@ -269,10 +342,11 @@ function ProjectGroup({
   initiallyExpanded = true,
 }: {
   projectName: string;
-  hits: { document: Conversation }[];
+  hits: ConversationHit[];
   initiallyExpanded?: boolean;
 }) {
   const [isExpanded, setIsExpanded] = useState(initiallyExpanded);
+  const { topLevel, childrenByParent } = nestSubagents(hits);
 
   return (
     <div className="border-b border-zinc-200 dark:border-zinc-800">
@@ -321,10 +395,11 @@ function ProjectGroup({
 
       {isExpanded && (
         <div className="border-l-2 border-zinc-100 dark:border-zinc-800 ml-6 pl-2 mb-2">
-          {hits.map((hit) => (
-            <ConversationCard
+          {topLevel.map((hit) => (
+            <ConversationWithChildren
               key={hit.document.id}
-              conversation={hit.document}
+              hit={hit}
+              childrenByParent={childrenByParent}
               showProject={false}
             />
           ))}
@@ -559,12 +634,16 @@ export default function Home() {
                       />
                     ))
                 ) : (
-                  results.hits.map((hit) => (
-                    <ConversationCard
-                      key={hit.document.id}
-                      conversation={hit.document}
-                    />
-                  ))
+                  (() => {
+                    const { topLevel, childrenByParent } = nestSubagents(results.hits);
+                    return topLevel.map((hit) => (
+                      <ConversationWithChildren
+                        key={hit.document.id}
+                        hit={hit}
+                        childrenByParent={childrenByParent}
+                      />
+                    ));
+                  })()
                 )}
               </div>
             )}
