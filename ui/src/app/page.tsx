@@ -237,10 +237,19 @@ function nestSubagents(hits: ConversationHit[]): {
     }
   }
 
+  // Build set of parent conversation_ids present in results
+  const topLevelIds = new Set(topLevel.map((h) => h.document.conversation_id));
+
   for (const sub of subagents) {
     const parentId = sub.document.parent_conversation_id!;
-    if (!childrenByParent[parentId]) childrenByParent[parentId] = [];
-    childrenByParent[parentId].push(sub);
+    if (topLevelIds.has(parentId)) {
+      // Parent is in results — nest under it
+      if (!childrenByParent[parentId]) childrenByParent[parentId] = [];
+      childrenByParent[parentId].push(sub);
+    } else {
+      // Orphaned subagent (parent not in results) — show at top level
+      topLevel.push(sub);
+    }
   }
 
   // Sort children by timestamp
