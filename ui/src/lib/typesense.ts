@@ -276,6 +276,70 @@ export async function getConversationMessages(
 }
 
 /**
+ * Get conversations related to a given conversation (children and siblings).
+ *
+ * Finds conversations that share a parent_conversation_id OR that are children
+ * of the given conversation_id.
+ */
+export async function getRelatedConversations(
+  conversationId: string,
+  parentConversationId?: string
+): Promise<SearchResults<Conversation>> {
+  const perPage = 50;
+  const filterParts: string[] = [];
+
+  // Find children: conversations whose parent_conversation_id is this one
+  filterParts.push(`parent_conversation_id:=${conversationId}`);
+
+  // If this conversation has a parent, also find siblings (same parent)
+  // and the parent itself
+  if (parentConversationId) {
+    filterParts.push(`parent_conversation_id:=${parentConversationId}`);
+    filterParts.push(`conversation_id:=${parentConversationId}`);
+  }
+
+  const params: Record<string, string | number> = {
+    q: "*",
+    query_by: "title,preview",
+    filter_by: filterParts.join(" || "),
+    per_page: perPage,
+    sort_by: "last_ts:desc",
+  };
+
+  const response = await executeSearch<Conversation>(
+    CONVERSATIONS_COLLECTION,
+    params
+  );
+  return transformResponse(response, perPage);
+}
+
+/**
+ * Get conversations by their conversation_id field values.
+ */
+export async function getConversationsByConversationIds(
+  conversationIds: string[]
+): Promise<SearchResults<Conversation>> {
+  if (conversationIds.length === 0) {
+    return { hits: [], found: 0, page: 1, perPage: 0, totalPages: 0 };
+  }
+
+  const filterValue = conversationIds.map((id) => `\`${id}\``).join(",");
+  const params: Record<string, string | number> = {
+    q: "*",
+    query_by: "title,preview",
+    filter_by: `conversation_id:=[${filterValue}]`,
+    per_page: conversationIds.length,
+    sort_by: "last_ts:desc",
+  };
+
+  const response = await executeSearch<Conversation>(
+    CONVERSATIONS_COLLECTION,
+    params
+  );
+  return transformResponse(response, conversationIds.length);
+}
+
+/**
  * Get a single conversation by ID.
  */
 export async function getConversationById(

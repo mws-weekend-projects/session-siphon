@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   searchConversations,
+  fetchConversationsByIds,
   type Conversation,
   type ConversationFilters,
   type SearchResults,
@@ -219,11 +220,12 @@ type ConversationHit = { document: Conversation };
 
 /**
  * Nest subagent conversations under their parent.
- * Returns hits with subagents removed from top level, attached to parents.
+ * Returns top-level hits, children grouped by parent, and IDs of missing parents.
  */
 function nestSubagents(hits: ConversationHit[]): {
   topLevel: ConversationHit[];
   childrenByParent: Record<string, ConversationHit[]>;
+  missingParentIds: string[];
 } {
   const subagents: ConversationHit[] = [];
   const topLevel: ConversationHit[] = [];
@@ -239,16 +241,14 @@ function nestSubagents(hits: ConversationHit[]): {
 
   // Build set of parent conversation_ids present in results
   const topLevelIds = new Set(topLevel.map((h) => h.document.conversation_id));
+  const missingParentIdSet = new Set<string>();
 
   for (const sub of subagents) {
     const parentId = sub.document.parent_conversation_id!;
-    if (topLevelIds.has(parentId)) {
-      // Parent is in results — nest under it
-      if (!childrenByParent[parentId]) childrenByParent[parentId] = [];
-      childrenByParent[parentId].push(sub);
-    } else {
-      // Orphaned subagent (parent not in results) — show at top level
-      topLevel.push(sub);
+    if (!childrenByParent[parentId]) childrenByParent[parentId] = [];
+    childrenByParent[parentId].push(sub);
+    if (!topLevelIds.has(parentId)) {
+      missingParentIdSet.add(parentId);
     }
   }
 
@@ -257,7 +257,7 @@ function nestSubagents(hits: ConversationHit[]): {
     children.sort((a, b) => a.document.first_ts - b.document.first_ts);
   }
 
-  return { topLevel, childrenByParent };
+  return { topLevel, childrenByParent, missingParentIds: [...missingParentIdSet] };
 }
 
 function ConversationWithChildren({
@@ -348,14 +348,15 @@ function ConversationCard({ conversation, showProject = true, indented = false }
 function ProjectGroup({
   projectName,
   hits,
+  childrenByParent,
   initiallyExpanded = true,
 }: {
   projectName: string;
   hits: ConversationHit[];
+  childrenByParent: Record<string, ConversationHit[]>;
   initiallyExpanded?: boolean;
 }) {
   const [isExpanded, setIsExpanded] = useState(initiallyExpanded);
-  const { topLevel, childrenByParent } = nestSubagents(hits);
 
   return (
     <div className="border-b border-zinc-200 dark:border-zinc-800">
@@ -404,7 +405,7 @@ function ProjectGroup({
 
       {isExpanded && (
         <div className="border-l-2 border-zinc-100 dark:border-zinc-800 ml-6 pl-2 mb-2">
-          {topLevel.map((hit) => (
+          {hits.map((hit) => (
             <ConversationWithChildren
               key={hit.document.id}
               hit={hit}
@@ -464,6 +465,7 @@ export default function Home() {
   const [availableSources, setAvailableSources] = useState<string[]>([]);
   const [availableProjects, setAvailableProjects] = useState<string[]>([]);
   const [availableMachineIds, setAvailableMachineIds] = useState<string[]>([]);
+  const [resolvedParents, setResolvedParents] = useState<Record<string, ConversationHit>>({});
 
   const fetchConversations = useCallback(async () => {
     setLoading(true);
@@ -474,6 +476,7 @@ export default function Home() {
         page,
         perPage: 20,
       });
+      setResolvedParents({});
       setResults(data);
 
       // Extract unique sources and projects from facet counts
@@ -523,6 +526,25 @@ export default function Home() {
     }, 300);
     return () => clearTimeout(timer);
   }, [fetchConversations]);
+
+  // Fetch missing parent conversations for orphaned subagents
+  useEffect(() => {
+    if (!results) return;
+    const { missingParentIds } = nestSubagents(results.hits);
+    // Only fetch parents we haven't resolved yet
+    const toFetch = missingParentIds.filter((id) => !resolvedParents[id]);
+    if (toFetch.length === 0) return;
+
+    fetchConversationsByIds(toFetch).then((data) => {
+      const newParents: Record<string, ConversationHit> = { ...resolvedParents };
+      for (const hit of data.hits) {
+        newParents[hit.document.conversation_id] = hit;
+      }
+      setResolvedParents(newParents);
+    }).catch(() => {
+      // Non-critical — subagents still show at top level
+    });
+  }, [results]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFilterChange = (newFilters: ConversationFilters) => {
     setFilters(newFilters);
@@ -616,44 +638,49 @@ export default function Home() {
                 <div className="px-4 py-2 text-xs text-zinc-500 dark:text-zinc-400 border-b border-zinc-100 dark:border-zinc-800">
                   {results.found} conversation{results.found !== 1 ? "s" : ""}
                 </div>
-                {groupByProject ? (
-                  Object.entries(
-                    results.hits.reduce((acc, hit) => {
-                      const project = hit.document.project;
-                      if (!acc[project]) acc[project] = [];
-                      acc[project].push(hit);
-                      return acc;
-                    }, {} as Record<string, typeof results.hits>)
-                  )
-                    .map(([project, hits]) => ({
-                      project,
-                      hits: hits.sort(
-                        (a, b) => b.document.last_ts - a.document.last_ts
-                      ),
-                      latestTs: Math.max(
-                        ...hits.map((h) => h.document.last_ts)
-                      ),
-                    }))
-                    .sort((a, b) => b.latestTs - a.latestTs)
-                    .map((group) => (
-                      <ProjectGroup
-                        key={group.project}
-                        projectName={group.project}
-                        hits={group.hits}
-                      />
-                    ))
-                ) : (
-                  (() => {
-                    const { topLevel, childrenByParent } = nestSubagents(results.hits);
-                    return topLevel.map((hit) => (
-                      <ConversationWithChildren
-                        key={hit.document.id}
-                        hit={hit}
-                        childrenByParent={childrenByParent}
-                      />
-                    ));
-                  })()
-                )}
+                {(() => {
+                  // Merge resolved parents into the hit list for nesting
+                  const allHits = [...results.hits, ...Object.values(resolvedParents)];
+                  const { topLevel, childrenByParent } = nestSubagents(allHits);
+
+                  if (groupByProject) {
+                    return Object.entries(
+                      topLevel.reduce((acc, hit) => {
+                        const project = hit.document.project;
+                        if (!acc[project]) acc[project] = [];
+                        acc[project].push(hit);
+                        return acc;
+                      }, {} as Record<string, ConversationHit[]>)
+                    )
+                      .map(([project, hits]) => ({
+                        project,
+                        hits: hits.sort(
+                          (a, b) => b.document.last_ts - a.document.last_ts
+                        ),
+                        childrenByParent,
+                        latestTs: Math.max(
+                          ...hits.map((h) => h.document.last_ts)
+                        ),
+                      }))
+                      .sort((a, b) => b.latestTs - a.latestTs)
+                      .map((group) => (
+                        <ProjectGroup
+                          key={group.project}
+                          projectName={group.project}
+                          hits={group.hits}
+                          childrenByParent={group.childrenByParent}
+                        />
+                      ));
+                  }
+
+                  return topLevel.map((hit) => (
+                    <ConversationWithChildren
+                      key={hit.document.id}
+                      hit={hit}
+                      childrenByParent={childrenByParent}
+                    />
+                  ));
+                })()}
               </div>
             )}
 

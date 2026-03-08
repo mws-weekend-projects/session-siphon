@@ -49,6 +49,51 @@ export async function searchConversations(
 }
 
 /**
+ * Fetch conversations related to a given conversation (children, siblings, parent).
+ */
+export async function fetchRelatedConversations(
+  conversationId: string,
+  parentConversationId?: string
+): Promise<SearchResults<Conversation>> {
+  const response = await fetch("/api/conversations/related", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ conversationId, parentConversationId }),
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error ?? `Fetch failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch conversations by their conversation_id values.
+ */
+export async function fetchConversationsByIds(
+  ids: string[]
+): Promise<SearchResults<Conversation>> {
+  if (ids.length === 0) {
+    return { hits: [], found: 0, page: 1, perPage: 0, totalPages: 0 };
+  }
+
+  const response = await fetch("/api/conversations/by-ids", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error ?? `Fetch failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
  * Search messages via the API route.
  */
 export async function searchMessages(
