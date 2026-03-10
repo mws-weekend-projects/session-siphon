@@ -141,39 +141,46 @@ function RelatedSessionsPanel({
       c.conversation_id !== conversation.parent_conversation_id
   );
 
+  const totalRelated = (parent ? 1 : 0) + siblings.length + children.length;
+
   return (
     <div className="border-t border-zinc-200 dark:border-zinc-800 mt-3 pt-3">
-      <h3 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-2">
-        Session Context
-      </h3>
-      <div className="space-y-1">
-        {parent && (
-          <div>
-            <div className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase mb-0.5">Parent</div>
-            <RelatedSessionLink conv={parent} currentId={conversation.id} />
-          </div>
-        )}
-        {siblings.length > 0 && (
-          <div>
-            <div className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase mb-0.5">
-              Siblings ({siblings.length})
+      <details open={totalRelated <= 3}>
+        <summary className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-2 cursor-pointer select-none list-none flex items-center gap-1 [&::-webkit-details-marker]:hidden">
+          <svg className="w-3 h-3 transition-transform [[open]>&]:rotate-90" viewBox="0 0 12 12" fill="currentColor">
+            <path d="M4.5 2l5 4-5 4V2z" />
+          </svg>
+          Session Context ({totalRelated})
+        </summary>
+        <div className="space-y-1 max-h-48 overflow-y-auto">
+          {parent && (
+            <div>
+              <div className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase mb-0.5">Parent</div>
+              <RelatedSessionLink conv={parent} currentId={conversation.id} />
             </div>
-            {siblings.map((s) => (
-              <RelatedSessionLink key={s.id} conv={s} currentId={conversation.id} />
-            ))}
-          </div>
-        )}
-        {children.length > 0 && (
-          <div>
-            <div className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase mb-0.5">
-              Children ({children.length})
+          )}
+          {siblings.length > 0 && (
+            <div>
+              <div className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase mb-0.5">
+                Siblings ({siblings.length})
+              </div>
+              {siblings.map((s) => (
+                <RelatedSessionLink key={s.id} conv={s} currentId={conversation.id} />
+              ))}
             </div>
-            {children.map((c) => (
-              <RelatedSessionLink key={c.id} conv={c} currentId={conversation.id} />
-            ))}
-          </div>
-        )}
-      </div>
+          )}
+          {children.length > 0 && (
+            <div>
+              <div className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase mb-0.5">
+                Children ({children.length})
+              </div>
+              {children.map((c) => (
+                <RelatedSessionLink key={c.id} conv={c} currentId={conversation.id} />
+              ))}
+            </div>
+          )}
+        </div>
+      </details>
     </div>
   );
 }
