@@ -46,7 +46,8 @@ def get_vscode_copilot_paths() -> list[Path]:
     """Discover VS Code Copilot conversation files.
 
     Locations vary by platform:
-    - Linux: ~/.config/Code/User/workspaceStorage/*/chatSessions/*.json
+    - Linux Desktop: ~/.config/Code/User/workspaceStorage/*/chatSessions/*.json
+    - Linux WSL/Remote: ~/.vscode-server/data/User/workspaceStorage/*/chatSessions/*.json
     - macOS: ~/Library/Application Support/Code/User/workspaceStorage/*/chatSessions/*.json
 
     Also scans Code - Insiders variant.
@@ -58,6 +59,9 @@ def get_vscode_copilot_paths() -> list[Path]:
         base_paths = [
             Path.home() / ".config" / "Code" / "User" / "workspaceStorage",
             Path.home() / ".config" / "Code - Insiders" / "User" / "workspaceStorage",
+            # WSL / VS Code Remote (Open Remote window)
+            Path.home() / ".vscode-server" / "data" / "User" / "workspaceStorage",
+            Path.home() / ".vscode-server-insiders" / "data" / "User" / "workspaceStorage",
         ]
     elif system == "Darwin":  # macOS
         base_paths = [

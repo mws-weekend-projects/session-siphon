@@ -180,6 +180,46 @@ class TestGetVscodeCopilotPaths:
         assert len(result) == 1
         assert file1 in result
 
+    def test_discovers_vscode_server_files_linux(self, tmp_path: Path) -> None:
+        """Should discover chatSessions in ~/.vscode-server on Linux/WSL."""
+        workspace_storage = (
+            tmp_path / ".vscode-server" / "data" / "User" / "workspaceStorage"
+        )
+        workspace = workspace_storage / "abc123" / "chatSessions"
+        workspace.mkdir(parents=True)
+
+        file1 = workspace / "session.json"
+        file1.touch()
+
+        with (
+            patch.object(Path, "home", return_value=tmp_path),
+            patch.object(platform, "system", return_value="Linux"),
+        ):
+            result = get_vscode_copilot_paths()
+
+        assert len(result) == 1
+        assert file1 in result
+
+    def test_discovers_vscode_server_insiders_files_linux(self, tmp_path: Path) -> None:
+        """Should discover chatSessions in ~/.vscode-server-insiders on Linux/WSL."""
+        workspace_storage = (
+            tmp_path / ".vscode-server-insiders" / "data" / "User" / "workspaceStorage"
+        )
+        workspace = workspace_storage / "def456" / "chatSessions"
+        workspace.mkdir(parents=True)
+
+        file1 = workspace / "session.json"
+        file1.touch()
+
+        with (
+            patch.object(Path, "home", return_value=tmp_path),
+            patch.object(platform, "system", return_value="Linux"),
+        ):
+            result = get_vscode_copilot_paths()
+
+        assert len(result) == 1
+        assert file1 in result
+
     def test_discovers_chat_session_files_macos(self, tmp_path: Path) -> None:
         """Should discover chatSessions/*.json files on macOS."""
         # Create macOS test structure
