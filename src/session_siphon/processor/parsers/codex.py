@@ -175,6 +175,10 @@ class CodexParser(Parser):
         payload: dict,
         ts: int,
         machine_id: str,
+        project: str,
+        session_id: str,
+        path: Path,
+        line_offset: int,
         git_repo: str | None,
     ) -> CanonicalMessage | None:
         """Extract a message from a response_item payload.
@@ -188,10 +192,6 @@ class CodexParser(Parser):
             path: Path to the source file
             line_offset: Byte offset in the file
             git_repo: Git repository identifier
-            project: Project/cwd path
-            session_id: Session identifier
-            path: Path to the source file
-            line_offset: Byte offset in the file
 
         Returns:
             CanonicalMessage or None if no valid content
