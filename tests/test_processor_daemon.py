@@ -337,6 +337,55 @@ class TestProcessFile:
         assert result["archived"] == 0
         assert file_path.exists()  # File should still be in inbox
 
+    def test_rewinds_offset_when_file_shrinks(
+        self, tmp_inbox: Path, tmp_archive: Path, tmp_state: ProcessorState,
+        mock_indexer: MagicMock,
+    ) -> None:
+        """Should reset parse offset when file is replaced with smaller content."""
+        (tmp_inbox / "machine1" / "claude_code").mkdir(parents=True)
+        file_path = tmp_inbox / "machine1" / "claude_code" / "conv.jsonl"
+
+        first_line = (
+            b'{"type":"user","message":{"role":"user","content":"'
+            + (b"x" * 200)
+            + b'"},"timestamp":"2024-01-01T00:00:00Z","uuid":"first"}\n'
+        )
+        second_line = (
+            b'{"type":"user","message":{"role":"user","content":"new"},'
+            b'"timestamp":"2024-01-01T00:00:01Z","uuid":"second"}\n'
+        )
+        assert len(second_line) < len(first_line)
+
+        file_path.write_bytes(first_line)
+        process_file(
+            file_path,
+            tmp_inbox,
+            tmp_archive,
+            tmp_state,
+            indexer=mock_indexer,
+            stability_seconds=999999,
+        )
+        first_state = tmp_state.get_file_state(str(file_path))
+        assert first_state is not None
+        assert first_state.last_offset == len(first_line)
+
+        # Simulate rotation/reset: same path, smaller file with new message content.
+        file_path.write_bytes(second_line)
+        result = process_file(
+            file_path,
+            tmp_inbox,
+            tmp_archive,
+            tmp_state,
+            indexer=mock_indexer,
+            stability_seconds=999999,
+        )
+
+        assert result["messages"] >= 1
+        second_state = tmp_state.get_file_state(str(file_path))
+        assert second_state is not None
+        assert second_state.last_offset == len(second_line)
+        assert second_state.last_offset < first_state.last_offset
+
     def test_skips_state_update_when_no_indexer(
         self, tmp_inbox: Path, tmp_archive: Path, tmp_state: ProcessorState,
     ) -> None:

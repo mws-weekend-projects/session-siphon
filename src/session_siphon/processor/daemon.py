@@ -233,6 +233,25 @@ def process_file(
     # Get last processed offset
     file_key = str(file_path)
     last_offset = state.get_last_offset(file_key)
+    try:
+        current_size = file_path.stat().st_size
+    except FileNotFoundError:
+        logger.debug("File disappeared before processing: path=%s", file_path)
+        return result
+    except OSError:
+        logger.exception("Cannot stat file: path=%s", file_path)
+        return result
+
+    # JSONL inbox files can be replaced with smaller snapshots (e.g. after rotation/sync).
+    # If stored offset is beyond current EOF, restart from 0 to avoid missing new data.
+    if current_size < last_offset:
+        logger.info(
+            "Detected file reset, rewinding offset: path=%s old_offset=%d new_size=%d",
+            file_path,
+            last_offset,
+            current_size,
+        )
+        last_offset = 0
 
     # Parse file
     try:
@@ -240,6 +259,20 @@ def process_file(
     except Exception:
         logger.exception("Error parsing file: source=%s path=%s", source, file_path)
         return result
+
+    # If parser reports an offset beyond current EOF (race with truncation), clamp it.
+    try:
+        post_parse_size = file_path.stat().st_size
+        if new_offset > post_parse_size:
+            logger.warning(
+                "Parser returned offset past EOF, clamping: path=%s offset=%d size=%d",
+                file_path,
+                new_offset,
+                post_parse_size,
+            )
+            new_offset = post_parse_size
+    except OSError:
+        logger.debug("Could not stat file after parse: path=%s", file_path)
 
     result["messages"] = len(messages)
 
